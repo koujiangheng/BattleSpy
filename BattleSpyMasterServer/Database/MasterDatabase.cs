@@ -23,13 +23,15 @@ namespace BattlelogMaster
         /// </summary>
         static MasterDatabase()
         {
-            Builder = new MySqlConnectionStringBuilder();
-            Builder.Server = Config.GetValue("Database", "Hostname");
-            Builder.Port = Config.GetType<uint>("Database", "Port");
-            Builder.UserID = Config.GetValue("Database", "Username");
-            Builder.Password = Config.GetValue("Database", "Password");
-            Builder.Database = Config.GetValue("Database", "MasterDatabase");
-            Builder.ConvertZeroDateTime = true;
+            Builder = new MySqlConnectionStringBuilder
+            {
+                Server = Config.GetValue("Database", "Hostname"),
+                Port = Config.GetType<uint>("Database", "Port"),
+                UserID = Config.GetValue("Database", "Username"),
+                Password = Config.GetValue("Database", "Password"),
+                Database = Config.GetValue("Database", "MasterDatabase"),
+                ConvertZeroDateTime = true
+            };
         }
 
         /// <summary>
@@ -50,33 +52,17 @@ namespace BattlelogMaster
                 base.Dispose();
         }
 
-        public void SyncServerList(ref ConcurrentDictionary<string, GameServer> Servers)
-        {
-            var Rows = base.Query("SELECT ip, queryport FROM server WHERE online=1");
-
-            foreach (Dictionary<string, object> Row in Rows)
-            {
-                IPAddress addy;
-                if (IPAddress.TryParse(Row["ip"].ToString(), out addy))
-                {
-                    IPEndPoint endPoint = new IPEndPoint(addy, Int32.Parse(Row["queryport"].ToString()));
-                    if(!Servers.ContainsKey(endPoint.ToString()))
-                        Servers.TryAdd(endPoint.ToString(), new GameServer(endPoint));
-                }
-            }
-        }
-
         public void AddOrUpdateServer(GameServer server)
         {
             // Check if server exists in database
             if (base.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND queryport=@P1", 
+                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND port=@P1", 
                 server.AddressInfo.Address, 
-                server.QueryPort) > 0)
+                server.hostport) > 0)
             {
                 // Update
                 base.Execute(
-                    "UPDATE server SET online=1, port=@P2, `name`=@P3, lastupdate=@P4 WHERE ip=@P0 AND queryport=@P1",
+                    "UPDATE server SET online=1, queryport=@P1, `name`=@P3, lastupdate=@P4 WHERE ip=@P0 AND port=@P2",
                     server.AddressInfo.Address,
                     server.QueryPort,
                     server.hostport,
@@ -102,18 +88,18 @@ namespace BattlelogMaster
         {
             // Check if server exists in database
             if (base.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND queryport=@P1",
+                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND port=@P1",
                 server.AddressInfo.Address,
-                server.QueryPort) == 0)
+                server.hostport) == 0)
             {
                 return;
             }
 
             // Update
             base.Execute(
-                "UPDATE server SET online=0, lastupdate=@P2 WHERE ip=@P0 AND queryport=@P1",
+                "UPDATE server SET online=0, lastupdate=@P2 WHERE ip=@P0 AND port=@P1",
                 server.AddressInfo.Address,
-                server.QueryPort,
+                server.hostport,
                 server.LastRefreshed.ToUnixTimestamp()
             );
         }

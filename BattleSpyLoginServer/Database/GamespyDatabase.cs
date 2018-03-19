@@ -27,13 +27,15 @@ namespace Server.Database
         /// </summary>
         static GamespyDatabase()
         {
-            Builder = new MySqlConnectionStringBuilder();
-            Builder.Server = Config.GetValue("Database", "Hostname");
-            Builder.Port = Config.GetType<uint>("Database", "Port");
-            Builder.UserID = Config.GetValue("Database", "Username");
-            Builder.Password = Config.GetValue("Database", "Password");
-            Builder.Database = Config.GetValue("Database", "LoginDatabase");
-            Builder.ConvertZeroDateTime = true;
+            Builder = new MySqlConnectionStringBuilder
+            {
+                Server = Config.GetValue("Database", "Hostname"),
+                Port = Config.GetType<uint>("Database", "Port"),
+                UserID = Config.GetValue("Database", "Username"),
+                Password = Config.GetValue("Database", "Password"),
+                Database = Config.GetValue("Database", "LoginDatabase"),
+                ConvertZeroDateTime = true
+            };
         }
 
         /// <summary>
