@@ -37,7 +37,7 @@ namespace BattlelogMaster
         /// <summary>
         /// Constructor
         /// </summary>
-        public MasterDatabase() : base("Mysql", Builder.ConnectionString)
+        public MasterDatabase() : base(Builder.ConnectionString)
         {
             // Try and Reconnect
             base.Connect();

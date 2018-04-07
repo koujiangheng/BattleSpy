@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using BattleSpy;
 using BattleSpy.Gamespy;
 
 namespace Server
@@ -44,6 +45,8 @@ namespace Server
         /// </summary>
         private static ConcurrentDictionary<long, GpcmClient> Clients = new ConcurrentDictionary<long, GpcmClient>();
 
+        public static ConcurrentQueue<PlayerStatusUpdate> PlayerStatusQueue { get; private set; } = new ConcurrentQueue<PlayerStatusUpdate>();
+
         /// <summary>
         /// Returns a list of all the connected clients
         /// </summary>
@@ -66,6 +69,11 @@ namespace Server
         /// </summary>
         public static System.Timers.Timer PollTimer { get; protected set; }
 
+        /// <summary>
+        /// A timer that is used to Poll all connections, and removes dropped connections
+        /// </summary>
+        public static System.Timers.Timer StatusTimer { get; protected set; }
+
         public GpcmServer(IPEndPoint bindTo) : base(bindTo, MaxConnections)
         {
             // Register for events
@@ -73,18 +81,69 @@ namespace Server
             GpcmClient.OnDisconnect += GpcmClient_OnDisconnect;
 
             // Setup timer. Every 15 seconds should be sufficient
-            PollTimer = new System.Timers.Timer(15000);
-            PollTimer.Elapsed += (s, e) =>
+            if (PollTimer == null || !PollTimer.Enabled)
             {
-                // Send keep alive to all connected clients
-                if (Clients.Count > 0)
-                    Parallel.ForEach(Clients.Values, client => client.SendKeepAlive());
+                PollTimer = new System.Timers.Timer(15000);
+                PollTimer.Elapsed += (s, e) =>
+                {
+                    // Send keep alive to all connected clients
+                    if (Clients.Count > 0)
+                        Parallel.ForEach(Clients.Values, client => client.SendKeepAlive());
 
-                // Disconnect hanging connections
-                if (Processing.Count > 0)
-                    Parallel.ForEach(Processing.Values, client => CheckTimeout(client));
-            };
-            PollTimer.Start();
+                    // Disconnect hanging connections
+                    if (Processing.Count > 0)
+                        Parallel.ForEach(Processing.Values, client => CheckTimeout(client));
+                };
+                PollTimer.Start();
+            }
+
+            // Setup timer. Every 5 seconds should be sufficient
+            if (StatusTimer == null || !StatusTimer.Enabled)
+            {
+                StatusTimer = new System.Timers.Timer(5000);
+                StatusTimer.Elapsed += (s, e) =>
+                {
+                    // Return if we are empty
+                    if (PlayerStatusQueue.IsEmpty) return;
+
+                    // Open database connection
+                    using (Database.GamespyDatabase db = new Database.GamespyDatabase())
+                    using (var transaction = db.BeginTransaction())
+                    {
+                        try
+                        {
+                            PlayerStatusUpdate result;
+                            while (PlayerStatusQueue.TryDequeue(out result))
+                            {
+                                // Exit if this player has no ID
+                                if (result.Client.PlayerId == 0)
+                                    continue;
+
+                                // Only update record under these two status'
+                                if (result.Status != LoginStatus.Completed && result.Status != LoginStatus.Disconnected)
+                                    continue;
+
+                                // Update player record
+                                db.Execute(
+                                    "UPDATE player SET online=@P0, lastip=@P1, lastonline=@P2 WHERE id=@P3",
+                                    (result.Status == LoginStatus.Disconnected) ? 0 : 1, 
+                                    result.Client.RemoteEndPoint.Address,
+                                    DateTime.UtcNow.ToUnixTimestamp(),
+                                    result.Client.PlayerId
+                                );
+                            }
+
+                            transaction.Commit();
+                        }
+                        catch (Exception ex)
+                        {
+                            ServerManager.Log("[Gpcm..ctor] StatusTimer: " + ex.Message);
+                            transaction.Rollback();
+                        }
+                    }
+                };
+                StatusTimer.Start();
+            }
 
             // Set connection handling
             base.ConnectionEnforceMode = EnforceMode.DuringPrepare;
@@ -119,8 +178,8 @@ namespace Server
             try
             {
                 // Set everyone's online session to 0
-                using (Database.GamespyDatabase Conn = new Database.GamespyDatabase())
-                    Conn.Execute("UPDATE player SET online=0 WHERE online != 0");
+                using (Database.GamespyDatabase db = new Database.GamespyDatabase())
+                    db.Execute("UPDATE player SET online=0 WHERE online != 0");
             }
             catch (Exception e)
             {
@@ -141,18 +200,18 @@ namespace Server
         /// When a new connection is established, we the parent class are responsible
         /// for handling the processing
         /// </summary>
-        /// <param name="Stream">A GamespyTcpStream object that wraps the I/O AsyncEventArgs and socket</param>
-        protected override void ProcessAccept(GamespyTcpStream Stream)
+        /// <param name="stream">A GamespyTcpStream object that wraps the I/O AsyncEventArgs and socket</param>
+        protected override void ProcessAccept(GamespyTcpStream stream)
         {
             // Get our connection id
-            long ConID = Interlocked.Increment(ref ConnectionCounter);
+            long connId = Interlocked.Increment(ref ConnectionCounter);
             GpcmClient client;
 
             try
             {
                 // Create a new GpcmClient, passing the IO object for the TcpClientStream
-                client = new GpcmClient(Stream, ConID);
-                Processing.TryAdd(ConID, client);
+                client = new GpcmClient(stream, connId);
+                Processing.TryAdd(connId, client);
 
                 // Begin the asynchronous login process
                 client.SendServerChallenge();
@@ -164,10 +223,10 @@ namespace Server
                 ExceptionHandler.GenerateExceptionLog(e);
 
                 // Remove pending connection
-                Processing.TryRemove(ConID, out client);
+                Processing.TryRemove(connId, out client);
 
                 // Release this stream so it can be used again
-                base.Release(Stream);
+                base.Release(stream);
             }
         }
 
@@ -208,23 +267,23 @@ namespace Server
         /// <summary>
         /// Returns whether the specified player is currently connected
         /// </summary>
-        /// <param name="Pid">The players ID</param>
+        /// <param name="playerId">The players ID</param>
         /// <returns></returns>
-        public bool IsConnected(int Pid)
+        public bool IsConnected(int playerId)
         {
-            return Clients.ContainsKey(Pid);
+            return Clients.ContainsKey(playerId);
         }
 
         /// <summary>
         /// Forces the logout of a connected client
         /// </summary>
-        /// <param name="Pid">The players ID</param>
+        /// <param name="playerId">The players ID</param>
         /// <returns>Returns whether the client was connected, and disconnect was called</returns>
-        public bool ForceLogout(int Pid)
+        public bool ForceLogout(int playerId)
         {
-            if (Clients.ContainsKey(Pid))
+            if (Clients.ContainsKey(playerId))
             {
-                Clients[Pid].Disconnect(DisconnectReason.ForcedLogout);
+                Clients[playerId].Disconnect(DisconnectReason.ForcedLogout);
                 return true;
             }
             return false;
@@ -242,6 +301,10 @@ namespace Server
                 // Remove client from online list
                 if (Clients.TryRemove(client.PlayerId, out client) && !client.Disposed)
                     client.Dispose();
+
+                // Add player to database queue
+                var status = new PlayerStatusUpdate(client, LoginStatus.Disconnected);
+                PlayerStatusQueue.Enqueue(status);
             }
             catch (Exception e)
             {
@@ -278,6 +341,10 @@ namespace Server
                     Program.ErrorLog.Write("ERROR: [GpcmServer._OnSuccessfulLogin] Unable to add client to HashSet.");
                     return;
                 }
+
+                // Add player to database queue
+                var status = new PlayerStatusUpdate(client, LoginStatus.Completed);
+                PlayerStatusQueue.Enqueue(status);
             }
             catch (Exception E)
             {

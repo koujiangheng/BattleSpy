@@ -41,7 +41,7 @@ namespace Server.Database
         /// <summary>
         /// Constructor
         /// </summary>
-        public GamespyDatabase() : base("Mysql", Builder.ConnectionString)
+        public GamespyDatabase() : base(Builder.ConnectionString)
         {
             // Try and Reconnect
             base.Connect();

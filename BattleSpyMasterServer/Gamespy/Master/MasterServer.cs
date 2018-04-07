@@ -320,7 +320,7 @@ namespace BattlelogMaster
 
             // set the country based off ip address if its IPv4
             server.country = (remote.Address.AddressFamily == AddressFamily.InterNetwork) 
-                ? Ip2nation.GetCountryCode(remote.Address).ToUpperInvariant() 
+                ? GeoIP.GetCountryCode(remote.Address).ToUpperInvariant() 
                 : "??";
 
             // Set server vars

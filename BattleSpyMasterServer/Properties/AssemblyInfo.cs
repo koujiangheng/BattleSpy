@@ -5,8 +5,8 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("BF2Statistics Master Gamespy Server")]
-[assembly: AssemblyDescription("GameSpy Master Server Emulator")]
+[assembly: AssemblyTitle("BF2Statistics GameSpy Master Server")]
+[assembly: AssemblyDescription("BF2Statistics Master Server Emulator")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("BF2Statistics")]
 [assembly: AssemblyProduct("BF2Statistics Master Gamespy Server")]

@@ -201,23 +201,11 @@ namespace Server
         /// </param>
         /// <remarks>
         /// If set the <paramref name="reason"/> is set to <see cref="DisconnectReason.ForcedServerShutdown"/>, 
-        /// the OnDisconect event will not be called, the database will not be updated to reset everyone's session code, 
-        /// and the EventArgs objects will NOT be returned to the IO pool. You should only set to
-        /// <see cref="DisconnectReason.ForcedServerShutdown"/> for a planned server shutdown.
+        /// the OnDisconect event will still be called, but the EventArgs objects will NOT be returned to the IO pool. 
+        /// You should only set to <see cref="DisconnectReason.ForcedServerShutdown"/> for a planned server shutdown.
         /// </remarks>
         public void Disconnect(DisconnectReason reason)
         {
-            // Update database session
-            if (Status == LoginStatus.Completed && reason != DisconnectReason.ForcedServerShutdown)
-            {
-                try
-                {
-                    using (GamespyDatabase Database = new GamespyDatabase())
-                        Database.Execute("UPDATE player SET online=0 WHERE id=" + PlayerId);
-                }
-                catch { }
-            }
-
             // If connection is still alive, disconnect user
             try
             {
@@ -239,7 +227,7 @@ namespace Server
                         RemoteEndPoint
                     );
                 }
-                else
+                else if (reason != DisconnectReason.ForcedServerShutdown)
                 {
                     ServerManager.Log(
                         "Client Disconnected:  {0} - {1} - {2}, Code={3}",
@@ -404,12 +392,6 @@ namespace Server
 
                         // Log Incoming Connections
                         ServerManager.Log("Client Login:   {0} - {1} - {2}", PlayerNick, PlayerId, RemoteEndPoint);
-                        Conn.Execute(
-                            "UPDATE player SET online=1, lastip=@P0, lastonline=@P1 WHERE id=@P2", 
-                            RemoteEndPoint.Address, 
-                            DateTime.UtcNow.ToUnixTimestamp(),
-                            PlayerId
-                        );
 
                         // Update status last, and call success login
                         Status = LoginStatus.Completed;
@@ -476,7 +458,7 @@ namespace Server
                     // We need to decode the Gamespy specific encoding for the password
                     string Password = GamespyUtils.DecodePassword(Recv["passwordenc"]);
                     string Cc = (RemoteEndPoint.AddressFamily == AddressFamily.InterNetwork)
-                        ? Ip2nation.GetCountryCode(RemoteEndPoint.Address)
+                        ? GeoIP.GetCountryCode(RemoteEndPoint.Address)
                         : "US";
 
                     // Attempt to create account. If Pid is 0, then we couldnt create the account

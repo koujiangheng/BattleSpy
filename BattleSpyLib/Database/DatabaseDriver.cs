@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Data.SQLite;
 using System.Globalization;
 using MySql.Data.MySqlClient;
 
@@ -57,24 +56,10 @@ namespace BattleSpy.Database
         /// Constructor
         /// </summary>
         /// <param name="Engine">The string name, for the GetDatabaseEngine() method</param>
-        public DatabaseDriver(string Engine, string ConnectionString)
+        public DatabaseDriver(string ConnectionString)
         {
             // Set class variables, and create a new connection builder
-            this.DatabaseEngine = GetDatabaseEngine(Engine);
-
-            // Establish the connection
-            if (this.DatabaseEngine == DatabaseEngine.Sqlite)
-            {
-                Connection = new SQLiteConnection(ConnectionString);
-            }
-            else if (this.DatabaseEngine == DatabaseEngine.Mysql)
-            {
-                Connection = new MySqlConnection(ConnectionString);
-            }
-            else
-            {
-                throw new Exception("Invalid Database type.");
-            }
+            Connection = new MySqlConnection(ConnectionString);
         }
 
         /// <summary>
@@ -140,10 +125,7 @@ namespace BattleSpy.Database
         /// <param name="QueryString"></param>
         public DbCommand CreateCommand(string QueryString)
         {
-            if (DatabaseEngine == Database.DatabaseEngine.Sqlite)
-                return new SQLiteCommand(QueryString, Connection as SQLiteConnection);
-            else
-                return new MySqlCommand(QueryString, Connection as MySqlConnection);
+            return new MySqlCommand(QueryString, Connection as MySqlConnection);
         }
 
         /// <summary>
@@ -152,10 +134,7 @@ namespace BattleSpy.Database
         /// <returns></returns>
         public DbParameter CreateParam()
         {
-            if (DatabaseEngine == Database.DatabaseEngine.Sqlite)
-                return (new SQLiteParameter() as DbParameter);
-            else
-                return (new MySqlParameter() as DbParameter);
+            return (new MySqlParameter() as DbParameter);
         }
 
         /// <summary>
