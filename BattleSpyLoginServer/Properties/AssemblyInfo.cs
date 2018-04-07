@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("BF2Statistics GameSpy Login Server")]
-[assembly: AssemblyDescription("BF2Statistics Login Emulator")]
+[assembly: AssemblyDescription("A Gamespy Login Server Emulator by BF2Statistics.com")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("BF2Statistics")]
 [assembly: AssemblyProduct("BF2Statistics Gamespy Login Server")]

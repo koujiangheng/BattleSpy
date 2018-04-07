@@ -97,6 +97,7 @@ namespace BattlelogMaster
             // Shut login servers down
             Console.WriteLine("Shutting down local Gamespy sockets...");
             ServerManager.Shutdown();
+            GeoIP.Exit();
         }
 
         /// <summary>

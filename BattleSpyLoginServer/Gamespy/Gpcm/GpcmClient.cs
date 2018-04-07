@@ -25,6 +25,11 @@ namespace Server
         public LoginStatus Status { get; protected set; }
 
         /// <summary>
+        /// Indicates whether this player successfully completed the login process
+        /// </summary>
+        public bool CompletedLoginProcess { get; protected set; } = false;
+
+        /// <summary>
         /// The connected clients Player Id
         /// </summary>
         public int PlayerId { get; protected set; }
@@ -395,6 +400,7 @@ namespace Server
 
                         // Update status last, and call success login
                         Status = LoginStatus.Completed;
+                        CompletedLoginProcess = true;
                         OnSuccessfulLogin?.Invoke(this);
                     }
                     else

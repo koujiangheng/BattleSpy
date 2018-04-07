@@ -123,7 +123,7 @@ namespace Server
         /// <returns></returns>
         public static int NumConnections()
         {
-            return CmServer.NumClients;
+            return CmServer.NumPlayersOnline;
         }
 
         /// <summary>

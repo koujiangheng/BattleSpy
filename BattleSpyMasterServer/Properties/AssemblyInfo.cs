@@ -6,10 +6,10 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("BF2Statistics GameSpy Master Server")]
-[assembly: AssemblyDescription("BF2Statistics Master Server Emulator")]
+[assembly: AssemblyDescription("A Gamespy Master Server Emulator by BF2Statistics.com")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("BF2Statistics")]
-[assembly: AssemblyProduct("BF2Statistics Master Gamespy Server")]
+[assembly: AssemblyProduct("BF2Statistics Gamespy Master Server")]
 [assembly: AssemblyCopyright("Copyright © BF2Statistics.com 2006-2018")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

@@ -45,21 +45,24 @@ namespace Server
         /// </summary>
         private static ConcurrentDictionary<long, GpcmClient> Clients = new ConcurrentDictionary<long, GpcmClient>();
 
+        /// <summary>
+        /// A Queue of player status updates we will make on the database in a batch update.
+        /// </summary>
         public static ConcurrentQueue<PlayerStatusUpdate> PlayerStatusQueue { get; private set; } = new ConcurrentQueue<PlayerStatusUpdate>();
 
         /// <summary>
         /// Returns a list of all the connected clients
         /// </summary>
-        public GpcmClient[] ConnectedClients
+        public GpcmClient[] ConnectedPlayers
         {
             get { return Clients.Values.ToArray(); }
         }
 
         /// <summary>
-        /// Returns the number of connected clients
+        /// Returns the number of players online
         /// </summary>
         /// <returns></returns>
-        public int NumClients
+        public int NumPlayersOnline
         {
             get { return Clients.Count; }
         }
@@ -70,10 +73,19 @@ namespace Server
         public static System.Timers.Timer PollTimer { get; protected set; }
 
         /// <summary>
-        /// A timer that is used to Poll all connections, and removes dropped connections
+        /// A timer that is used to batch all PlayerStatusUpdates into the database
         /// </summary>
         public static System.Timers.Timer StatusTimer { get; protected set; }
 
+        /// <summary>
+        /// Indicates whether we are closing the server down
+        /// </summary>
+        public bool Exiting { get; private set; } = false;
+
+        /// <summary>
+        /// Creates a new instance of <see cref="GpcmServer"/>
+        /// </summary>
+        /// <param name="bindTo"></param>
         public GpcmServer(IPEndPoint bindTo) : base(bindTo, MaxConnections)
         {
             // Register for events
@@ -112,11 +124,12 @@ namespace Server
                     {
                         try
                         {
+                            var timestamp = DateTime.UtcNow.ToUnixTimestamp();
                             PlayerStatusUpdate result;
                             while (PlayerStatusQueue.TryDequeue(out result))
                             {
-                                // Exit if this player has no ID
-                                if (result.Client.PlayerId == 0)
+                                // Skip if this player never finished logging in
+                                if (!result.Client.CompletedLoginProcess)
                                     continue;
 
                                 // Only update record under these two status'
@@ -128,7 +141,7 @@ namespace Server
                                     "UPDATE player SET online=@P0, lastip=@P1, lastonline=@P2 WHERE id=@P3",
                                     (result.Status == LoginStatus.Disconnected) ? 0 : 1, 
                                     result.Client.RemoteEndPoint.Address,
-                                    DateTime.UtcNow.ToUnixTimestamp(),
+                                    timestamp,
                                     result.Client.PlayerId
                                 );
                             }
@@ -152,6 +165,11 @@ namespace Server
             // Begin accepting connections
             base.StartAcceptAsync();
         }
+        
+        ~GpcmServer()
+        {
+            Shutdown();
+        }
 
         /// <summary>
         /// Shutsdown the ClientManager server and socket
@@ -160,14 +178,17 @@ namespace Server
         {
             // Stop accepting new connections
             base.IgnoreNewConnections = true;
-
-            // Discard the poll timer
-            PollTimer.Stop();
-            PollTimer.Dispose();
+            Exiting = true;
 
             // Unregister events so we dont get a shit ton of calls
             GpcmClient.OnSuccessfulLogin -= GpcmClient_OnSuccessfulLogin;
             GpcmClient.OnDisconnect -= GpcmClient_OnDisconnect;
+
+            // Discard the poll timer
+            PollTimer.Stop();
+            PollTimer.Dispose();
+            StatusTimer.Stop();
+            StatusTimer.Dispose();
 
             // Disconnected all connected clients
             Console.WriteLine("Disconnecting all users...");
@@ -179,7 +200,7 @@ namespace Server
             {
                 // Set everyone's online session to 0
                 using (Database.GamespyDatabase db = new Database.GamespyDatabase())
-                    db.Execute("UPDATE player SET online=0 WHERE online != 0");
+                    db.Execute("UPDATE player SET online=0");
             }
             catch (Exception e)
             {
@@ -258,10 +279,10 @@ namespace Server
                     ExceptionHandler.GenerateExceptionLog(ex);
                 }
             }
-            else if (client.Status == LoginStatus.Completed)
-            {
-                Processing.TryRemove(client.ConnectionId, out oldC);
-            }
+            //else if (client.Status == LoginStatus.Completed)
+            //{
+                //Processing.TryRemove(client.ConnectionId, out oldC);
+            //}
         }
 
         /// <summary>
@@ -295,6 +316,9 @@ namespace Server
         /// <param name="client">The client object whom is disconnecting</param>
         private void GpcmClient_OnDisconnect(GpcmClient client)
         {
+            // If we are exiting, don't do anything here.
+            if (Exiting) return;
+
             // Remove client, and call OnUpdate Event
             try
             {
@@ -325,22 +349,19 @@ namespace Server
                 GpcmClient oldC;
                 GpcmClient client = sender as GpcmClient;
 
+                // Remove connection from processing
+                Processing.TryRemove(client.ConnectionId, out oldC);
+
                 // Check to see if the client is already logged in, if so disconnect the old user
                 if (Clients.TryRemove(client.PlayerId, out oldC))
                 {
                     oldC.Disconnect(DisconnectReason.NewLoginDetected);
-                    return;
+                    ServerManager.Log("Login Clash:   {0} - {1} - {2}", client.PlayerNick, client.PlayerId, client.RemoteEndPoint);
                 }
-
-                // Remove connection from processing
-                Processing.TryRemove(client.ConnectionId, out oldC);
 
                 // Add current client to the dictionary
                 if (!Clients.TryAdd(client.PlayerId, client))
-                {
                     Program.ErrorLog.Write("ERROR: [GpcmServer._OnSuccessfulLogin] Unable to add client to HashSet.");
-                    return;
-                }
 
                 // Add player to database queue
                 var status = new PlayerStatusUpdate(client, LoginStatus.Completed);
