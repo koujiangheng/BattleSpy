@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Net;
-using BattleSpy;
+﻿using BattleSpy;
 using BattleSpy.Database;
 using MySql.Data.MySqlClient;
 
@@ -56,20 +52,23 @@ namespace BattlelogMaster
         {
             // Check if server exists in database
             if (base.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND port=@P1", 
+                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND queryport=@P1", 
                 server.AddressInfo.Address, 
-                server.hostport) > 0)
+                server.QueryPort) > 0)
             {
                 // Update
                 base.Execute(
-                    "UPDATE server SET online=1, queryport=@P1, `name`=@P3, lastupdate=@P4 WHERE ip=@P0 AND port=@P2",
+                    "UPDATE server SET online=1, gameport=@P1, `name`=@P3, lastupdate=@P4 WHERE ip=@P0 AND queryport=@P2",
                     server.AddressInfo.Address,
-                    server.QueryPort,
                     server.hostport,
+                    server.QueryPort,
                     server.hostname,
                     server.LastRefreshed.ToUnixTimestamp()
                 );
             }
+            /*
+             * We are NOT adding new servers with the new AuthToken system in place!
+             * 
             else
             {
                 // Add
@@ -82,24 +81,25 @@ namespace BattlelogMaster
                     server.LastRefreshed.ToUnixTimestamp()
                 );
             }
+            */
         }
 
         public void UpdateServerOffline(GameServer server)
         {
             // Check if server exists in database
             if (base.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND port=@P1",
+                "SELECT COUNT(*) FROM server WHERE ip=@P0 AND queryport=@P1",
                 server.AddressInfo.Address,
-                server.hostport) == 0)
+                server.QueryPort) == 0)
             {
                 return;
             }
 
             // Update
             base.Execute(
-                "UPDATE server SET online=0, lastupdate=@P2 WHERE ip=@P0 AND port=@P1",
+                "UPDATE server SET online=0, lastupdate=@P2 WHERE ip=@P0 AND queryport=@P1",
                 server.AddressInfo.Address,
-                server.hostport,
+                server.QueryPort,
                 server.LastRefreshed.ToUnixTimestamp()
             );
         }

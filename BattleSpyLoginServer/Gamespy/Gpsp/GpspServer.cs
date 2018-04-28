@@ -25,6 +25,11 @@ namespace Server
         private static long ConnectionCounter = 0;
 
         /// <summary>
+        /// Indicates whether we are closing the server down
+        /// </summary>
+        public bool Exiting { get; private set; } = false;
+
+        /// <summary>
         /// A List of sucessfully active connections (Name => Client Obj) on the MasterServer TCP line
         /// </summary>
         private static ConcurrentDictionary<long, GpspClient> Clients = new ConcurrentDictionary<long, GpspClient>();
@@ -38,6 +43,12 @@ namespace Server
             base.StartAcceptAsync();
         }
 
+        ~GpspServer()
+        {
+            if (!Exiting)
+                Shutdown();
+        }
+
         /// <summary>
         /// Shutsdown the GPSP server and socket
         /// </summary>
@@ -45,6 +56,7 @@ namespace Server
         {
             // Stop accepting new connections
             base.IgnoreNewConnections = true;
+            Exiting = true;
 
             // Unregister events so we dont get a shit ton of calls
             GpspClient.OnDisconnect -= GpspClient_OnDisconnect;

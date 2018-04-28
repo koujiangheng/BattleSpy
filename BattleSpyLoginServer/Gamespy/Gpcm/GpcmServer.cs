@@ -168,7 +168,8 @@ namespace Server
         
         ~GpcmServer()
         {
-            Shutdown();
+            if (!Exiting)
+                Shutdown();
         }
 
         /// <summary>
